@@ -76,11 +76,14 @@ const App: React.FC = () => {
                     productType: selectedProductType
                 };
                 try {
+                    // Make sure we don't send requests for an empty product list
+                    if (filteredProducts.length === 0) {
+                        setDynamicQuestions([]);
+                        return;
+                    }
                     const questions = await generateDynamicQuestions(filters, filteredProducts);
                     setDynamicQuestions(questions);
                 } catch (error) {
-                    // The error from the user prompt suggests this is where it fails.
-                    // Logging it is good.
                     console.error("Failed to generate dynamic questions:", error);
                     setDynamicQuestions([]); // Clear questions on error to avoid showing stale data.
                 } finally {
@@ -98,10 +101,7 @@ const App: React.FC = () => {
             clearTimeout(debounceTimer);
         };
         
-    // The dependencies are correct. When any filter changes, this effect re-runs,
-    // clearing the old timer and setting a new one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType]);
+    }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType, filteredProducts]);
 
 
     const handleEmailSubmit = (e: React.FormEvent) => {
