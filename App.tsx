@@ -101,7 +101,7 @@ const App: React.FC = () => {
     // The dependencies are correct. When any filter changes, this effect re-runs,
     // clearing the old timer and setting a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType, filteredProducts]);
+    }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType]);
 
 
     const handleEmailSubmit = (e: React.FormEvent) => {
