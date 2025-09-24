@@ -55,53 +55,53 @@ const App: React.FC = () => {
     );
 
     useEffect(() => {
-        // If no relevant filters are active, clear questions and do nothing.
-        if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
+    const anyFilterActive = selectedRole || selectedIndustry || selectedProfile || selectedDelivery || selectedProductType;
+
+    if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
+        setDynamicQuestions([]);
+        setIsLoadingQuestions(false);
+        return;
+    }
+
+    setIsLoadingQuestions(true);
+
+    const debounceTimer = setTimeout(async () => {
+        const filters = {
+            role: selectedRole,
+            industry: selectedIndustry,
+            profile: selectedProfile,
+            deliveryMethod: selectedDelivery,
+            productType: selectedProductType
+        };
+
+        const filtered = PRODUCTS.filter(p => {
+            const roleMatch = selectedRole ? p.role.includes(selectedRole) : true;
+            const industryMatch = selectedIndustry ? p.industries.includes(selectedIndustry) : true;
+            const profileMatch = selectedProfile ? p.profile.includes(selectedProfile) : true;
+            const deliveryMatch = selectedDelivery ? p.deliveryMethod.includes(selectedDelivery) : true;
+            const productTypeMatch = selectedProductType ? p.productType === selectedProductType : true;
+            return roleMatch && industryMatch && profileMatch && deliveryMatch && productTypeMatch;
+        });
+
+        if (filtered.length === 0) {
             setDynamicQuestions([]);
-            setIsLoadingQuestions(false); // Ensure loading is off
+            setIsLoadingQuestions(false);
             return;
         }
-        
-        // Show loading state as soon as a change is detected
-        setIsLoadingQuestions(true);
 
-        // Set up a timer to delay the API call.
-        const debounceTimer = setTimeout(() => {
-            const fetchQuestions = async () => {
-                const filters = {
-                    role: selectedRole,
-                    industry: selectedIndustry,
-                    profile: selectedProfile,
-                    deliveryMethod: selectedDelivery,
-                    productType: selectedProductType
-                };
-                try {
-                    // Make sure we don't send requests for an empty product list
-                    if (filteredProducts.length === 0) {
-                        setDynamicQuestions([]);
-                        return;
-                    }
-                    const questions = await generateDynamicQuestions(filters, filteredProducts);
-                    setDynamicQuestions(questions);
-                } catch (error) {
-                    console.error("Failed to generate dynamic questions:", error);
-                    setDynamicQuestions([]); // Clear questions on error to avoid showing stale data.
-                } finally {
-                    // Hide loading state once the API call is complete (or has failed).
-                    setIsLoadingQuestions(false);
-                }
-            };
+        try {
+            const questions = await generateDynamicQuestions(filters, filtered);
+            setDynamicQuestions(questions);
+        } catch (error) {
+            console.error("Failed to generate dynamic questions:", error);
+            setDynamicQuestions([]);
+        } finally {
+            setIsLoadingQuestions(false);
+        }
+    }, 500);
 
-            fetchQuestions();
-        }, 500); // 500ms delay
-
-        // This cleanup function will run every time the dependencies change,
-        // which cancels the previous timer. This is the core of debouncing.
-        return () => {
-            clearTimeout(debounceTimer);
-        };
-        
-    }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType, filteredProducts]);
+    return () => clearTimeout(debounceTimer);
+}, [selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType]);
 
 
     const handleEmailSubmit = (e: React.FormEvent) => {
