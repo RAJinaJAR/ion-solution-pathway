@@ -55,53 +55,61 @@ const App: React.FC = () => {
     );
 
     useEffect(() => {
-    const anyFilterActive = selectedRole || selectedIndustry || selectedProfile || selectedDelivery || selectedProductType;
+  const anyFilterActive =
+    selectedRole || selectedIndustry || selectedProfile || selectedDelivery || selectedProductType;
 
-    if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
-        setDynamicQuestions([]);
-        setIsLoadingQuestions(false);
-        return;
+  if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
+    setDynamicQuestions([]);
+    setIsLoadingQuestions(false);
+    return;
+  }
+
+  setIsLoadingQuestions(true);
+
+  const debounceTimer = setTimeout(async () => {
+    const filters = {
+      role: selectedRole,
+      industry: selectedIndustry,
+      profile: selectedProfile,
+      deliveryMethod: selectedDelivery,
+      productType: selectedProductType
+    };
+
+    // Move filtering logic here to avoid dependency on useMemo
+    const filtered = PRODUCTS.filter(p => {
+      const roleMatch = selectedRole ? p.role.includes(selectedRole) : true;
+      const industryMatch = selectedIndustry ? p.industries.includes(selectedIndustry) : true;
+      const profileMatch = selectedProfile ? p.profile.includes(selectedProfile) : true;
+      const deliveryMatch = selectedDelivery ? p.deliveryMethod.includes(selectedDelivery) : true;
+      const productTypeMatch = selectedProductType ? p.productType === selectedProductType : true;
+      return roleMatch && industryMatch && profileMatch && deliveryMatch && productTypeMatch;
+    });
+
+    if (filtered.length === 0) {
+      setDynamicQuestions([]);
+      setIsLoadingQuestions(false);
+      return;
     }
 
-    setIsLoadingQuestions(true);
+    try {
+      const questions = await generateDynamicQuestions(filters, filtered);
+      setDynamicQuestions(questions);
+    } catch (error) {
+      console.error("Failed to generate dynamic questions:", error);
+      setDynamicQuestions([]);
+    } finally {
+      setIsLoadingQuestions(false);
+    }
+  }, 500);
 
-    const debounceTimer = setTimeout(async () => {
-        const filters = {
-            role: selectedRole,
-            industry: selectedIndustry,
-            profile: selectedProfile,
-            deliveryMethod: selectedDelivery,
-            productType: selectedProductType
-        };
-
-        const filtered = PRODUCTS.filter(p => {
-            const roleMatch = selectedRole ? p.role.includes(selectedRole) : true;
-            const industryMatch = selectedIndustry ? p.industries.includes(selectedIndustry) : true;
-            const profileMatch = selectedProfile ? p.profile.includes(selectedProfile) : true;
-            const deliveryMatch = selectedDelivery ? p.deliveryMethod.includes(selectedDelivery) : true;
-            const productTypeMatch = selectedProductType ? p.productType === selectedProductType : true;
-            return roleMatch && industryMatch && profileMatch && deliveryMatch && productTypeMatch;
-        });
-
-        if (filtered.length === 0) {
-            setDynamicQuestions([]);
-            setIsLoadingQuestions(false);
-            return;
-        }
-
-        try {
-            const questions = await generateDynamicQuestions(filters, filtered);
-            setDynamicQuestions(questions);
-        } catch (error) {
-            console.error("Failed to generate dynamic questions:", error);
-            setDynamicQuestions([]);
-        } finally {
-            setIsLoadingQuestions(false);
-        }
-    }, 500);
-
-    return () => clearTimeout(debounceTimer);
-}, [selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType]);
+  return () => clearTimeout(debounceTimer);
+}, [
+  selectedRole,
+  selectedIndustry,
+  selectedProfile,
+  selectedDelivery,
+  selectedProductType
+]);
 
 
     const handleEmailSubmit = (e: React.FormEvent) => {
