@@ -55,9 +55,19 @@ const App: React.FC = () => {
     );
 
     useEffect(() => {
-        if (anyFilterActive && (selectedRole || selectedIndustry)) {
+        // If no relevant filters are active, clear questions and do nothing.
+        if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
+            setDynamicQuestions([]);
+            setIsLoadingQuestions(false); // Ensure loading is off
+            return;
+        }
+        
+        // Show loading state as soon as a change is detected
+        setIsLoadingQuestions(true);
+
+        // Set up a timer to delay the API call.
+        const debounceTimer = setTimeout(() => {
             const fetchQuestions = async () => {
-                setIsLoadingQuestions(true);
                 const filters = {
                     role: selectedRole,
                     industry: selectedIndustry,
@@ -65,15 +75,31 @@ const App: React.FC = () => {
                     deliveryMethod: selectedDelivery,
                     productType: selectedProductType
                 };
-                const questions = await generateDynamicQuestions(filters, filteredProducts);
-                setDynamicQuestions(questions);
-                setIsLoadingQuestions(false);
+                try {
+                    const questions = await generateDynamicQuestions(filters, filteredProducts);
+                    setDynamicQuestions(questions);
+                } catch (error) {
+                    // The error from the user prompt suggests this is where it fails.
+                    // Logging it is good.
+                    console.error("Failed to generate dynamic questions:", error);
+                    setDynamicQuestions([]); // Clear questions on error to avoid showing stale data.
+                } finally {
+                    // Hide loading state once the API call is complete (or has failed).
+                    setIsLoadingQuestions(false);
+                }
             };
 
             fetchQuestions();
-        } else {
-            setDynamicQuestions([]);
-        }
+        }, 500); // 500ms delay
+
+        // This cleanup function will run every time the dependencies change,
+        // which cancels the previous timer. This is the core of debouncing.
+        return () => {
+            clearTimeout(debounceTimer);
+        };
+        
+    // The dependencies are correct. When any filter changes, this effect re-runs,
+    // clearing the old timer and setting a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [anyFilterActive, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType, filteredProducts]);
 
