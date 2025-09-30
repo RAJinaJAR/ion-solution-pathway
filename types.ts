@@ -32,6 +32,8 @@ export interface Message {
   id: string;
   role: 'user' | 'model';
   content: string;
+  options?: string[];
+  optionsAnswered?: boolean;
 }
 
 // FIX: Added missing DynamicQuestion interface based on its usage in DynamicQuestions.tsx.
