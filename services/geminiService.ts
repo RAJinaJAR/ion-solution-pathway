@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import type { DynamicQuestion, Product, Role, Industry, Profile, DeliveryMethod, ProductType } from "../types";
 
