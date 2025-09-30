@@ -1,5 +1,7 @@
 {
   "name": "ION Solution Pathway",
   "description": "An interactive widget to guide users to the right ION products based on their role and sector, and then captures their information for a personalized guide.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
