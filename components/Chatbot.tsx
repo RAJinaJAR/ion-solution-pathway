@@ -101,7 +101,11 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
 - Use this context to provide personalized recommendations and answer questions.
 - If the user has selected a role and industry, ask them insightful, open-ended questions to understand their specific challenges and needs. For example: 'What are the biggest hurdles in your current risk management process?' or 'Could you tell me more about your operational workflow?'. This will help the ION BDR team.
 - Keep your responses concise and helpful. Do not mention that you are an AI.
-- Do not output markdown.`;
+- Do not output markdown.
+- IMPORTANT: When you ask a question where the user should choose from a set of options, first state the question. Then, on a new line, provide the options as a JSON string array prefixed with \`OPTIONS_JSON:\`. For example:
+What are your biggest challenges?
+OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
+- Only use this specific \`OPTIONS_JSON:\` format when presenting choices. Do not include any other text after the JSON array.`;
     }, [filters, products]);
 
 
@@ -130,7 +134,32 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
             if (!chatRef.current) throw new Error("Chat not initialized");
 
             const response = await chatRef.current.sendMessage({ message: messageContent });
-            const modelResponse: Message = { id: (Date.now() + 1).toString(), role: 'model', content: response.text };
+            
+            let modelResponse: Message;
+            const responseText = response.text;
+            const optionsMarker = 'OPTIONS_JSON:';
+            const optionsIndex = responseText.indexOf(optionsMarker);
+
+            if (optionsIndex !== -1) {
+                const content = responseText.substring(0, optionsIndex).trim();
+                const optionsJsonString = responseText.substring(optionsIndex + optionsMarker.length).trim();
+                try {
+                    const options = JSON.parse(optionsJsonString);
+                    modelResponse = { 
+                        id: (Date.now() + 1).toString(), 
+                        role: 'model', 
+                        content: content,
+                        options: options,
+                        optionsAnswered: false
+                    };
+                } catch (e) {
+                    console.error("Failed to parse options JSON:", e);
+                    modelResponse = { id: (Date.now() + 1).toString(), role: 'model', content: responseText };
+                }
+            } else {
+                modelResponse = { id: (Date.now() + 1).toString(), role: 'model', content: responseText };
+            }
+
             setMessages(prev => [...prev, modelResponse]);
         } catch (error) {
             console.error("Error sending message:", error);
@@ -144,6 +173,15 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         sendMessage(input);
+    };
+    
+    const handleOptionClick = (messageId: string, option: string) => {
+        setMessages(prevMessages => 
+            prevMessages.map(msg => 
+                msg.id === messageId ? { ...msg, optionsAnswered: true } : msg
+            )
+        );
+        sendMessage(option);
     };
 
     const stopListening = useCallback(() => {
@@ -259,6 +297,11 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
         }
     };
     
+    const lastModelMessageWithOptions = [...messages]
+        .reverse()
+        .find(msg => msg.role === 'model' && msg.options);
+    const needsOptionSelection = lastModelMessageWithOptions && !lastModelMessageWithOptions.optionsAnswered;
+
     return (
         <>
             <button
@@ -286,11 +329,27 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.map((msg) => (
-                        <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.role === 'model' && <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center flex-shrink-0"><BotIcon className="w-5 h-5 text-slate-500"/></div>}
-                            <div className={`max-w-[80%] p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none'}`}>
-                                <p className="text-sm">{msg.content}</p>
+                        <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex items-end gap-2 w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                {msg.role === 'model' && <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center flex-shrink-0"><BotIcon className="w-5 h-5 text-slate-500"/></div>}
+                                <div className={`max-w-[80%] p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none'}`}>
+                                    <p className="text-sm" dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br />') }}></p>
+                                </div>
                             </div>
+                            {msg.role === 'model' && msg.options && (
+                                <div className="flex flex-wrap gap-2 mt-2 ml-10">
+                                    {msg.options.map((option, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleOptionClick(msg.id, option)}
+                                            disabled={isLoading || msg.optionsAnswered}
+                                            className="px-3 py-1.5 text-sm font-medium bg-white border border-slate-300 text-blue-600 rounded-full hover:bg-blue-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
                     {isLoading && (
@@ -322,9 +381,9 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder={isListening ? "Listening..." : "Ask a question..."}
+                        placeholder={needsOptionSelection ? "Please select an option above" : isListening ? "Listening..." : "Ask a question..."}
                         className="flex-1 w-full px-4 py-2 bg-slate-100 rounded-full border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
-                        disabled={isLoading}
+                        disabled={isLoading || needsOptionSelection}
                     />
                     <button type="submit" className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-blue-300 transition-colors" disabled={isLoading || !input.trim()}>
                         <SendIcon className="w-5 h-5" />
