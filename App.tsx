@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Role, Industry, Profile, DeliveryMethod, ProductType, Product, DynamicQuestion } from './types';
+import type { Role, Industry, Profile, DeliveryMethod, ProductType, DynamicQuestion } from './types';
 import { ROLES, INDUSTRIES, PROFILES, DELIVERY_METHODS, PRODUCT_TYPES, PRODUCTS } from './constants';
-import { generateDynamicQuestions } from './services/geminiService';
 import { QuestionGroup } from './components/QuestionGroup';
 import { ProductList } from './components/ProductList';
 import { LeadCapture } from './components/LeadCapture';
-import { DynamicQuestions } from './components/DynamicQuestions';
+import { Chatbot } from './components/Chatbot';
 import { ResetIcon } from './components/icons';
+import { DynamicQuestions } from './components/DynamicQuestions';
+import { generateDynamicQuestions } from './services/geminiService';
 
 const App: React.FC = () => {
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -17,8 +19,9 @@ const App: React.FC = () => {
 
     const [email, setEmail] = useState('');
     const [isSubmitted, setIsSubmitted] = useState(false);
+    
     const [dynamicQuestions, setDynamicQuestions] = useState<DynamicQuestion[]>([]);
-    const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+    const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
     
     const handleClearFilters = useCallback(() => {
         setSelectedRole(null);
@@ -29,11 +32,9 @@ const App: React.FC = () => {
         setEmail('');
         setIsSubmitted(false);
         setDynamicQuestions([]);
-        setIsLoadingQuestions(false);
     }, []);
 
     const filteredProducts = useMemo(() => {
-        // Start with all products if no filters are selected
         if (!selectedRole && !selectedIndustry && !selectedProfile && !selectedDelivery && !selectedProductType) {
             return PRODUCTS;
         }
@@ -55,62 +56,30 @@ const App: React.FC = () => {
     );
 
     useEffect(() => {
-  const anyFilterActive =
-    selectedRole || selectedIndustry || selectedProfile || selectedDelivery || selectedProductType;
-
-  if (!anyFilterActive || (!selectedRole && !selectedIndustry)) {
-    setDynamicQuestions([]);
-    setIsLoadingQuestions(false);
-    return;
-  }
-
-  setIsLoadingQuestions(true);
-
-  const debounceTimer = setTimeout(async () => {
-    const filters = {
-      role: selectedRole,
-      industry: selectedIndustry,
-      profile: selectedProfile,
-      deliveryMethod: selectedDelivery,
-      productType: selectedProductType
-    };
-
-    // Move filtering logic here to avoid dependency on useMemo
-    const filtered = PRODUCTS.filter(p => {
-      const roleMatch = selectedRole ? p.role.includes(selectedRole) : true;
-      const industryMatch = selectedIndustry ? p.industries.includes(selectedIndustry) : true;
-      const profileMatch = selectedProfile ? p.profile.includes(selectedProfile) : true;
-      const deliveryMatch = selectedDelivery ? p.deliveryMethod.includes(selectedDelivery) : true;
-      const productTypeMatch = selectedProductType ? p.productType === selectedProductType : true;
-      return roleMatch && industryMatch && profileMatch && deliveryMatch && productTypeMatch;
-    });
-
-    if (filtered.length === 0) {
-      setDynamicQuestions([]);
-      setIsLoadingQuestions(false);
-      return;
-    }
-
-    try {
-      const questions = await generateDynamicQuestions(filters, filtered);
-      setDynamicQuestions(questions);
-    } catch (error) {
-      console.error("Failed to generate dynamic questions:", error);
-      setDynamicQuestions([]);
-    } finally {
-      setIsLoadingQuestions(false);
-    }
-  }, 500);
-
-  return () => clearTimeout(debounceTimer);
-}, [
-  selectedRole,
-  selectedIndustry,
-  selectedProfile,
-  selectedDelivery,
-  selectedProductType
-]);
-
+        if (anyFilterActive) {
+            setIsQuestionsLoading(true);
+            const currentFilters = {
+                role: selectedRole,
+                industry: selectedIndustry,
+                profile: selectedProfile,
+                deliveryMethod: selectedDelivery,
+                productType: selectedProductType,
+            };
+            generateDynamicQuestions(currentFilters, filteredProducts)
+                .then(questions => {
+                    setDynamicQuestions(questions);
+                })
+                .catch(error => {
+                    console.error("Failed to load dynamic questions:", error);
+                    setDynamicQuestions([]);
+                })
+                .finally(() => {
+                    setIsQuestionsLoading(false);
+                });
+        } else {
+            setDynamicQuestions([]);
+        }
+    }, [anyFilterActive, filteredProducts, selectedRole, selectedIndustry, selectedProfile, selectedDelivery, selectedProductType]);
 
     const handleEmailSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -175,7 +144,10 @@ const App: React.FC = () => {
                         </div>
                         
                         {anyFilterActive && (
-                            <div className="space-y-8 mt-8">
+                             <div className="space-y-8 mt-8">
+                                <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+                                     <DynamicQuestions questions={dynamicQuestions} isLoading={isQuestionsLoading} />
+                                </div>
                                 <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
                                     <LeadCapture
                                         email={email}
@@ -184,15 +156,22 @@ const App: React.FC = () => {
                                         isSubmitted={isSubmitted}
                                     />
                                 </div>
-                                {!isSubmitted && (selectedRole || selectedIndustry) && (
-                                     <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
-                                        <DynamicQuestions questions={dynamicQuestions} isLoading={isLoadingQuestions} />
-                                     </div>
-                                )}
                             </div>
                         )}
                     </div>
                 </div>
+
+                <Chatbot 
+                    filters={{
+                        role: selectedRole,
+                        industry: selectedIndustry,
+                        profile: selectedProfile,
+                        deliveryMethod: selectedDelivery,
+                        productType: selectedProductType,
+                    }}
+                    products={filteredProducts}
+                />
+
                 <footer className="text-center mt-12 py-4">
                     <p className="text-xs text-slate-400">
                       &copy; {new Date().getFullYear()} ION. All Rights Reserved.
