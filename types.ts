@@ -28,7 +28,14 @@ export interface Product {
   productType: ProductType;
 }
 
+export interface Message {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+}
+
+// FIX: Added missing DynamicQuestion interface based on its usage in DynamicQuestions.tsx.
 export interface DynamicQuestion {
-    questionText: string;
-    options: string[];
+  questionText: string;
+  options: string[];
 }
