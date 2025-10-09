@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, Chat, Modality, LiveServerMessage, Blob } from '@google/genai';
 import type { Message, Product } from '../types';
@@ -85,6 +86,8 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
     const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const nextStartTimeRef = useRef(0);
     const audioSourcesRef = useRef(new Set<AudioBufferSourceNode>());
+    const currentInputTranscriptionRef = useRef('');
+    const currentOutputTranscriptionRef = useRef('');
     
     const getSystemInstruction = useCallback(() => {
         const filterDescriptions = Object.entries(filters)
@@ -228,12 +231,16 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
             outputAudioContextRef.current = new AudioContext({ sampleRate: 24000 });
             nextStartTimeRef.current = 0;
             audioSourcesRef.current.clear();
+            currentInputTranscriptionRef.current = '';
+            currentOutputTranscriptionRef.current = '';
+
 
             sessionPromiseRef.current = ai.live.connect({
                 model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                 config: {
                     responseModalities: [Modality.AUDIO],
                     inputAudioTranscription: {},
+                    outputAudioTranscription: {},
                     systemInstruction: getSystemInstruction(),
                 },
                 callbacks: {
@@ -255,19 +262,60 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                     onmessage: async (message: LiveServerMessage) => {
                         if (message.serverContent?.inputTranscription) {
                             const text = message.serverContent.inputTranscription.text;
-                            setInput(prev => prev + text);
+                            currentInputTranscriptionRef.current += text;
+                            setInput(currentInputTranscriptionRef.current);
                         }
+
+                        if (message.serverContent?.outputTranscription) {
+                            const text = message.serverContent.outputTranscription.text;
+                            currentOutputTranscriptionRef.current += text;
+                        }
+
                         if (message.serverContent?.turnComplete) {
-                            const finalInput = input;
+                            const fullInputTranscription = currentInputTranscriptionRef.current;
+                            const fullOutputTranscription = currentOutputTranscriptionRef.current;
+                            
+                            currentInputTranscriptionRef.current = '';
+                            currentOutputTranscriptionRef.current = '';
                             setInput('');
-                             if(finalInput.trim()){
-                                sendMessage(finalInput.trim());
+
+                            if (fullInputTranscription.trim()) {
+                                const newUserMessage: Message = { id: Date.now().toString(), role: 'user', content: fullInputTranscription.trim() };
+                                setMessages(prev => [...prev, newUserMessage]);
+                            }
+
+                            if (fullOutputTranscription.trim()) {
+                                let modelResponse: Message;
+                                const responseText = fullOutputTranscription.trim();
+                                const optionsMarker = 'OPTIONS_JSON:';
+                                const optionsIndex = responseText.indexOf(optionsMarker);
+                    
+                                if (optionsIndex !== -1) {
+                                    const content = responseText.substring(0, optionsIndex).trim();
+                                    const optionsJsonString = responseText.substring(optionsIndex + optionsMarker.length).trim();
+                                    try {
+                                        const options = JSON.parse(optionsJsonString);
+                                        modelResponse = { 
+                                            id: (Date.now() + 1).toString(), 
+                                            role: 'model', 
+                                            content: content,
+                                            options: options,
+                                            optionsAnswered: false
+                                        };
+                                    } catch (e) {
+                                        console.error("Failed to parse options JSON from voice output:", e);
+                                        modelResponse = { id: (Date.now() + 1).toString(), role: 'model', content: responseText };
+                                    }
+                                } else {
+                                    modelResponse = { id: (Date.now() + 1).toString(), role: 'model', content: responseText };
+                                }
+                                setMessages(prev => [...prev, modelResponse]);
                             }
                         }
+
                         const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
                         if (audioData) {
                             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current!.currentTime);
-                            // FIX: Updated decodeAudioData call to match new function signature.
                             const audioBuffer = await decodeAudioData(decode(audioData), outputAudioContextRef.current!, 24000, 1);
                             const source = outputAudioContextRef.current!.createBufferSource();
                             source.buffer = audioBuffer;
