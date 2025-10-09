@@ -272,7 +272,7 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                 model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                 config: {
                     responseModalities: [Modality.AUDIO],
-                    inputAudioTranscription: {languageCode: 'en'},
+                    inputAudioTranscription: {},
                     outputAudioTranscription: {},
                     systemInstruction: getSystemInstruction(),
                 },
