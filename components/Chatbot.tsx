@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, Chat, Modality, LiveServerMessage, Blob } from '@google/genai';
 import type { Message, Product } from '../types';
@@ -68,9 +67,32 @@ interface ChatbotProps {
 
 export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([
-        { id: '1', role: 'model', content: "Hello! I'm the ION Solution Expert. How can I help you find the right commodity management solution today?" }
-    ]);
+    
+    // Load messages from localStorage on initial render
+    const [messages, setMessages] = useState<Message[]>(() => {
+        try {
+            const saved = localStorage.getItem('ion-chatbot-history');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed;
+                }
+            }
+        } catch (e) {
+            console.error('Could not load messages from local storage', e);
+        }
+        return [{ id: '1', role: 'model', content: "Hello! I'm the ION Solution Expert. How can I help you find the right commodity management solution today?" }];
+    });
+
+    // Save messages to localStorage whenever they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('ion-chatbot-history', JSON.stringify(messages));
+        } catch (e) {
+            console.error('Could not save messages to local storage', e);
+        }
+    }, [messages]);
+
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const chatRef = useRef<Chat | null>(null);
@@ -113,13 +135,25 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
 
 
     useEffect(() => {
+        // When the component loads or filters change, initialize a new chat session.
+        // We seed it with the existing conversation history.
+        const history = messages
+            // The first message is the default greeting, don't include it in the history
+            // for the model, as it might confuse it into repeating the greeting.
+            .filter(msg => msg.id !== '1')
+            .map(msg => ({
+                role: msg.role,
+                parts: [{ text: msg.content }],
+            }));
+            
         chatRef.current = ai.chats.create({
             model: 'gemini-2.5-flash',
+            history: history, // Provide the loaded history
             config: {
                 systemInstruction: getSystemInstruction()
             }
         });
-    }, [getSystemInstruction]);
+    }, [getSystemInstruction]); // Re-initialize chat when context (filters) changes
     
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
