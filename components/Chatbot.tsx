@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, Chat, Modality, LiveServerMessage, Blob } from '@google/genai';
 import type { Message, Product } from '../types';
@@ -99,8 +100,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // --- Voice Chat State ---
-    const [isListening, setIsListening] = useState(false);
-    const [isMicReady, setIsMicReady] = useState(false);
+    const [micState, setMicState] = useState<'idle' | 'connecting' | 'listening'>('idle');
     const sessionPromiseRef = useRef<Promise<any> | null>(null);
     const inputAudioContextRef = useRef<AudioContext | null>(null);
     const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -235,29 +235,28 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
             scriptProcessorRef.current = null;
         }
         if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
-            inputAudioContextRef.current.close();
+            inputAudioContextRef.current.close().then(() => inputAudioContextRef.current = null);
         }
         if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
              for (const source of audioSourcesRef.current.values()) {
                 source.stop();
             }
             audioSourcesRef.current.clear();
-            outputAudioContextRef.current.close();
+            outputAudioContextRef.current.close().then(() => outputAudioContextRef.current = null);
         }
-        setIsListening(false);
+        setMicState('idle');
     }, []);
 
     const toggleListening = async () => {
-        if (isListening) {
+        if (micState === 'listening' || micState === 'connecting') {
             stopListening();
             return;
         }
 
+        setMicState('connecting');
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioStreamRef.current = stream;
-            setIsListening(true);
-            setIsMicReady(true);
 
             // FIX: Use a cross-browser compatible way to get AudioContext that satisfies TypeScript.
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -279,8 +278,13 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                 },
                 callbacks: {
                     onopen: () => {
-                        const source = inputAudioContextRef.current!.createMediaStreamSource(stream);
-                        const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
+                        if (!inputAudioContextRef.current || !audioStreamRef.current) {
+                            return; // Component might have been unmounted or stopped.
+                        }
+                        setMicState('listening');
+
+                        const source = inputAudioContextRef.current.createMediaStreamSource(audioStreamRef.current);
+                        const scriptProcessor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
                         scriptProcessorRef.current = scriptProcessor;
                         
                         scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
@@ -291,7 +295,7 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                             });
                         };
                         source.connect(scriptProcessor);
-                        scriptProcessor.connect(inputAudioContextRef.current!.destination);
+                        scriptProcessor.connect(inputAudioContextRef.current.destination);
                     },
                     onmessage: async (message: LiveServerMessage) => {
                         if (message.serverContent?.inputTranscription) {
@@ -348,12 +352,12 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                         }
 
                         const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-                        if (audioData) {
-                            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current!.currentTime);
-                            const audioBuffer = await decodeAudioData(decode(audioData), outputAudioContextRef.current!, 24000, 1);
-                            const source = outputAudioContextRef.current!.createBufferSource();
+                        if (audioData && outputAudioContextRef.current) {
+                            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current.currentTime);
+                            const audioBuffer = await decodeAudioData(decode(audioData), outputAudioContextRef.current, 24000, 1);
+                            const source = outputAudioContextRef.current.createBufferSource();
                             source.buffer = audioBuffer;
-                            source.connect(outputAudioContextRef.current!.destination);
+                            source.connect(outputAudioContextRef.current.destination);
                             source.addEventListener('ended', () => {
                                 audioSourcesRef.current.delete(source);
                             });
@@ -367,15 +371,14 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                         stopListening();
                     },
                     onclose: () => {
-                         // Session closed by server or user.
+                        setMicState('idle');
                     },
                 },
             });
 
         } catch (err) {
             console.error("Error starting voice chat:", err);
-            setIsListening(false);
-            setIsMicReady(false);
+            stopListening();
         }
     };
     
@@ -454,16 +457,26 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                     <button
                         type="button"
                         onClick={toggleListening}
-                        className={`p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-500' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        aria-label={isListening ? 'Stop listening' : 'Start listening'}
+                        className={`p-2 rounded-full transition-colors flex items-center justify-center w-9 h-9 ${
+                            micState === 'listening' ? 'bg-red-100 text-red-500' :
+                            micState === 'connecting' ? 'bg-yellow-100 text-yellow-500' :
+                            'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        aria-label={micState === 'listening' ? 'Stop listening' : 'Start listening'}
                     >
-                        {isListening ? <MicOffIcon className="w-5 h-5" /> : <MicIcon className="w-5 h-5" />}
+                        {micState === 'connecting' && <LoadingSpinner />}
+                        {micState === 'listening' && <MicOffIcon className="w-5 h-5" />}
+                        {micState === 'idle' && <MicIcon className="w-5 h-5" />}
                     </button>
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder={needsOptionSelection ? "Please select an option above" : isListening ? "Listening..." : "Ask a question..."}
+                        placeholder={
+                            needsOptionSelection ? "Please select an option above" : 
+                            micState === 'listening' ? "Listening..." : 
+                            micState === 'connecting' ? "Connecting to voice..." :
+                            "Ask a question..."
+                        }
                         className="flex-1 w-full px-4 py-2 bg-slate-100 rounded-full border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
                         disabled={isLoading || needsOptionSelection}
                     />
