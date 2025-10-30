@@ -124,6 +124,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ filters, products }) => {
 - The user has currently filtered the list to these products: ${products.length > 0 ? JSON.stringify(products.map(p => p.productName)) : "None"}.
 - The user's current filter selections are: ${filterDescriptions || "None"}.
 - Use this context to provide personalized recommendations and answer questions.
+- If asked about a specific product, provide a short description and a link to the product page. The URL should follow this format: https://iongroup.com/products/{category}/{product-name}/ where {category} is the product's category in lowercase (e.g., 'commodities' or 'markets') and {product-name} is the product's name converted to a URL-friendly format (lowercase, spaces replaced with hyphens, and special characters like parentheses removed). For example, for 'RightAngle' (category: 'Commodities'), the link is 'https://iongroup.com/products/commodities/rightangle/'. For 'Decision Support Center (DSC)', the link would be 'https://iongroup.com/products/commodities/decision-support-center-dsc/'.
 - If the user has selected a role and industry, ask them insightful, open-ended questions to understand their specific challenges and needs. For example: 'What are the biggest hurdles in your current risk management process?' or 'Could you tell me more about your operational workflow?'. This will help the ION BDR team.
 - Keep your responses concise and helpful. Do not mention that you are an AI.
 - Do not output markdown.
