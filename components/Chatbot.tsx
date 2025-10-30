@@ -58,6 +58,18 @@ function createBlob(data: Float32Array): Blob {
     };
 }
 
+const linkify = (text: string) => {
+    // Escape HTML to prevent XSS, then linkify URLs and replace newlines.
+    const escapedText = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Using break-all to prevent long URLs from overflowing the chat bubble
+    return escapedText.replace(/\n/g, '<br />').replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline break-all">$1</a>');
+};
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -419,7 +431,7 @@ OPTIONS_JSON: ["Manual processes", "Data accuracy", "System integration"]
                             <div className={`flex items-end gap-2 w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 {msg.role === 'model' && <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center flex-shrink-0"><BotIcon className="w-5 h-5 text-slate-500"/></div>}
                                 <div className={`max-w-[80%] p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none'}`}>
-                                    <p className="text-sm" dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br />') }}></p>
+                                    <p className="text-sm" dangerouslySetInnerHTML={{ __html: linkify(msg.content) }}></p>
                                 </div>
                             </div>
                             {msg.role === 'model' && msg.options && (
